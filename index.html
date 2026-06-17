@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>성산일출봉 등반 게임</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #87ceeb;
+    }
+
+    #ui {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      color: white;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 14px 16px;
+      border-radius: 12px;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    #message {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 24px 32px;
+      border-radius: 18px;
+      text-align: center;
+      display: none;
+      z-index: 20;
+    }
+
+    #message button {
+      margin-top: 16px;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <strong>성산일출봉 등반</strong><br />
+    이동: W A S D / 방향키<br />
+    점프: Space<br />
+    목표: 정상 깃발에 도착하기<br />
+    <span id="height">고도: 0m</span>
+  </div>
+
+  <div id="message">
+    <h2>정상 도착!</h2>
+    <p>성산일출봉 등반 성공</p>
+    <button onclick="location.reload()">다시 하기</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+    let scene, camera, renderer;
+    let player, mountain, trail;
+    let velocityY = 0;
+    let isGrounded = false;
+    let gameClear = false;
+
+    const keys = {};
+    const speed = 0.16;
+    const gravity = 0.012;
+    const jumpPower = 0.28;
+
+    init();
+    animate();
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87ceeb);
+      scene.fog = new THREE.Fog(0x87ceeb, 25, 95);
+
+      camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      createLight();
+      createSea();
+      createMountain();
+      createTrail();
+      createPlayer();
+      createFlag();
+      createDecorations();
+
+      window.addEventListener("resize", onResize);
+      window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+      window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+    }
+
+    function createLight() {
+      const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+      sun.position.set(-20, 30, 20);
+      sun.castShadow = true;
+      scene.add(sun);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+      scene.add(ambient);
+    }
+
+    function createSea() {
+      const seaGeo = new THREE.PlaneGeometry(300, 300);
+      const seaMat = new THREE.MeshStandardMaterial({
+        color: 0x2f9fd7,
+        roughness: 0.45,
+        metalness: 0.05
+      });
+
+      const sea = new THREE.Mesh(seaGeo, seaMat);
+      sea.rotation.x = -Math.PI / 2;
+      sea.position.y = -0.15;
+      scene.add(sea);
+
+      const islandGeo = new THREE.CylinderGeometry(22, 34, 1.2, 64);
+      const islandMat = new THREE.MeshStandardMaterial({ color: 0x3f8f4f });
+      const island = new THREE.Mesh(islandGeo, islandMat);
+      island.position.y = 0.45;
+      island.receiveShadow = true;
+      scene.add(island);
+    }
+
+    function createMountain() {
+      const geo = new THREE.ConeGeometry(16, 18, 64, 24);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x4f7f43,
+        roughness: 0.9
+      });
+
+      mountain = new THREE.Mesh(geo, mat);
+      mountain.position.y = 9;
+      mountain.castShadow = true;
+      mountain.receiveShadow = true;
+      scene.add(mountain);
+
+      const craterGeo = new THREE.CylinderGeometry(5.5, 7.5, 1.2, 64);
+      const craterMat = new THREE.MeshStandardMaterial({ color: 0x6b5e3e });
+      const crater = new THREE.Mesh(craterGeo, craterMat);
+      crater.position.y = 18.5;
+      crater.receiveShadow = true;
+      scene.add(crater);
+    }
+
+    function createTrail() {
+      trail = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc7a36b });
+
+      for (let i = 0; i < 42; i++) {
+        const t = i / 41;
+        const angle = t * Math.PI * 4.5;
+        const radius = 14 - t * 8;
+        const y = t * 17 + 1;
+
+        const stepGeo = new THREE.BoxGeometry(2.8, 0.25, 1.4);
+        const step = new THREE.Mesh(stepGeo, mat);
+
+        step.position.set(
+          Math.cos(angle) * radius,
+          y,
+          Math.sin(angle) * radius
+        );
+
+        step.rotation.y = -angle;
+        step.castShadow = true;
+        step.receiveShadow = true;
+        trail.add(step);
+      }
+
+      scene.add(trail);
+    }
+
+    function createPlayer() {
+      const bodyGeo = new THREE.SphereGeometry(0.45, 32, 32);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff6b6b });
+
+      player = new THREE.Mesh(bodyGeo, bodyMat);
+      player.position.set(14, 1.6, 0);
+      player.castShadow = true;
+      scene.add(player);
+    }
+
+    function createFlag() {
+      const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 3);
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(0, 20.3, 0);
+      scene.add(pole);
+
+      const flagGeo = new THREE.PlaneGeometry(2.2, 1.2);
+      const flagMat = new THREE.MeshStandardMaterial({
+        color: 0xff3333,
+        side: THREE.DoubleSide
+      });
+
+      const flag = new THREE.Mesh(flagGeo, flagMat);
+      flag.position.set(1.1, 21.1, 0);
+      scene.add(flag);
+    }
+
+    function createDecorations() {
+      const treeMat = new THREE.MeshStandardMaterial({ color: 0x216b35 });
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4a24 });
+
+      for (let i = 0; i < 45; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 18 + Math.random() * 10;
+
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.12, 0.15, 0.8),
+          trunkMat
+        );
+
+        trunk.position.set(
+          Math.cos(angle) * radius,
+          1.1,
+          Math.sin(angle) * radius
+        );
+
+        const leaf = new THREE.Mesh(
+          new THREE.ConeGeometry(0.7, 1.4, 8),
+          treeMat
+        );
+
+        leaf.position.set(trunk.position.x, 2, trunk.position.z);
+
+        scene.add(trunk);
+        scene.add(leaf);
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      updatePlayer();
+      updateCamera();
+      checkClear();
+
+      renderer.render(scene, camera);
+    }
+
+    function updatePlayer() {
+      if (gameClear) return;
+
+      const move = new THREE.Vector3();
+
+      if (keys["w"] || keys["arrowup"]) move.z -= 1;
+      if (keys["s"] || keys["arrowdown"]) move.z += 1;
+      if (keys["a"] || keys["arrowleft"]) move.x -= 1;
+      if (keys["d"] || keys["arrowright"]) move.x += 1;
+
+      move.normalize().multiplyScalar(speed);
+      player.position.x += move.x;
+      player.position.z += move.z;
+
+      const groundY = getGroundHeight(player.position.x, player.position.z);
+
+      velocityY -= gravity;
+      player.position.y += velocityY;
+
+      if (player.position.y <= groundY + 0.55) {
+        player.position.y = groundY + 0.55;
+        velocityY = 0;
+        isGrounded = true;
+      } else {
+        isGrounded = false;
+      }
+
+      if (keys[" "] && isGrounded) {
+        velocityY = jumpPower;
+      }
+
+      const distanceFromCenter = Math.sqrt(
+        player.position.x ** 2 + player.position.z ** 2
+      );
+
+      if (distanceFromCenter > 32) {
+        player.position.x *= 0.96;
+        player.position.z *= 0.96;
+      }
+
+      document.getElementById("height").textContent =
+        `고도: ${Math.max(0, Math.floor(player.position.y * 10))}m`;
+    }
+
+    function getGroundHeight(x, z) {
+      const distance = Math.sqrt(x * x + z * z);
+
+      if (distance > 16) {
+        return 1;
+      }
+
+      const mountainHeight = 18 * (1 - distance / 16);
+      const trailBonus = getTrailHeight(x, z);
+
+      return Math.max(1, mountainHeight, trailBonus);
+    }
+
+    function getTrailHeight(x, z) {
+      let closestHeight = 1;
+
+      trail.children.forEach(step => {
+        const dx = x - step.position.x;
+        const dz = z - step.position.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        if (distance < 1.7) {
+          closestHeight = Math.max(closestHeight, step.position.y + 0.2);
+        }
+      });
+
+      return closestHeight;
+    }
+
+    function updateCamera() {
+      const target = new THREE.Vector3(
+        player.position.x,
+        player.position.y + 1.2,
+        player.position.z
+      );
+
+      const cameraOffset = new THREE.Vector3(0, 5, 9);
+      camera.position.lerp(target.clone().add(cameraOffset), 0.08);
+      camera.lookAt(target);
+    }
+
+    function checkClear() {
+      if (player.position.y > 18.5 && player.position.distanceTo(new THREE.Vector3(0, player.position.y, 0)) < 4) {
+        gameClear = true;
+        document.getElementById("message").style.display = "block";
+      }
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+</body>
+</html>
